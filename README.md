@@ -27,6 +27,7 @@ This document is a developer-oriented description of what event loop does. It tr
 
 This is what the spec says:
 
+
     eventLoop = {
         taskQueues: {
             events: [], // UI events from native GUI framework
@@ -39,7 +40,10 @@ This is what the spec says:
         microtaskQueue: [
         ],
 
-        nextTask: function() {
+        requestAnimationFrameQueue: [
+        ],
+
+        nextTask() {
             // Spec says:
             // "Select the oldest task on one of the event loop's task queues"
             // Which gives browser implementers lots of freedom
@@ -50,20 +54,31 @@ This is what the spec says:
             return null;
         },
 
-        executeMicrotasks: function() {
-            if (scriptExecuting)
-                return;
-            let microtasks = this.microtaskQueue;
-            this.microtaskQueue = [];
-            for (let t of microtasks)
-                t.execute();
+        executeJSCallback(callback) {
+        callback();
+        if (!scriptExecuting) this.executeMicrotasks();
         },
 
-        needsRendering: function() {
+        executeMicrotasks() {
+            let microTask;
+
+            while (microtask = this.microtaskQueue.shift()) {
+                microTask.execute();
+            }
+        },
+
+        executeRequestAnimationFrameCallbacks() {
+            const callbacks = this.requestAnimationFrameQueue;
+            this.requestAnimationFrameQueue = [];
+
+            for (const callback of callbacks) this.executeJSCallback(callback);
+        }
+
+        needsRendering() {
             return vSyncTime() && (needsDomRerender() || hasEventLoopEventsToDispatch());
         },
 
-        render: function() {
+        render() {
             dispatchPendingUIEvents();
             resizeSteps();
             scrollSteps();
@@ -71,7 +86,7 @@ This is what the spec says:
             cssAnimationSteps();
             fullscreenRenderingSteps();
 
-            animationFrameCallbackSteps();
+            this.executeRequestAnimationFrameCallbacks();
 
             intersectionObserverSteps();
 
@@ -92,8 +107,6 @@ This is what the spec says:
         if (eventLoop.needsRendering())
             eventLoop.render();
     }
-
-
 
 ## Close reading of the spec
 
