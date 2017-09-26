@@ -27,86 +27,87 @@ This document is a developer-oriented description of what event loop does. It tr
 
 This is what the spec says:
 
+```js
+eventLoop = {
+    taskQueues: {
+        events: [], // UI events from native GUI framework
+        parser: [], // HTML parser
+        callbacks: [], // setTimeout, requestIdleTask
+        resources: [], // image loading
+        domManipulation[]
+    },
 
-    eventLoop = {
-        taskQueues: {
-            events: [], // UI events from native GUI framework
-            parser: [], // HTML parser
-            callbacks: [], // setTimeout, requestIdleTask
-            resources: [], // image loading
-            domManipulation[]
-        },
+    microtaskQueue: [
+    ],
 
-        microtaskQueue: [
-        ],
+    requestAnimationFrameQueue: [
+    ],
 
-        requestAnimationFrameQueue: [
-        ],
+    nextTask() {
+        // Spec says:
+        // "Select the oldest task on one of the event loop's task queues"
+        // Which gives browser implementers lots of freedom
+        // Queues can have different priorities, etc.
+        for (let q of taskQueues)
+            if (q.length > 0)
+                return q.shift();
+        return null;
+    },
 
-        nextTask() {
-            // Spec says:
-            // "Select the oldest task on one of the event loop's task queues"
-            // Which gives browser implementers lots of freedom
-            // Queues can have different priorities, etc.
-            for (let q of taskQueues)
-                if (q.length > 0)
-                    return q.shift();
-            return null;
-        },
+    executeJSCallback(callback) {
+      callback();
+      if (!scriptExecuting) this.executeMicrotasks();
+    },
 
-        executeJSCallback(callback) {
-        callback();
-        if (!scriptExecuting) this.executeMicrotasks();
-        },
+    executeMicrotasks() {
+        let microTask;
 
-        executeMicrotasks() {
-            let microTask;
-
-            while (microtask = this.microtaskQueue.shift()) {
-                microTask.execute();
-            }
-        },
-
-        executeRequestAnimationFrameCallbacks() {
-            const callbacks = this.requestAnimationFrameQueue;
-            this.requestAnimationFrameQueue = [];
-
-            for (const callback of callbacks) this.executeJSCallback(callback);
+        while (microtask = this.microtaskQueue.shift()) {
+            microTask.execute();
         }
+    },
 
-        needsRendering() {
-            return vSyncTime() && (needsDomRerender() || hasEventLoopEventsToDispatch());
-        },
+    executeRequestAnimationFrameCallbacks() {
+        const callbacks = this.requestAnimationFrameQueue;
+        this.requestAnimationFrameQueue = [];
 
-        render() {
-            dispatchPendingUIEvents();
-            resizeSteps();
-            scrollSteps();
-            mediaQuerySteps();
-            cssAnimationSteps();
-            fullscreenRenderingSteps();
-
-            this.executeRequestAnimationFrameCallbacks();
-
-            intersectionObserverSteps();
-
-            while (resizeObserverSteps()) {
-                updateStyle();
-                updateLayout();
-            }
-            paint();
-        }
+        for (const callback of callbacks) this.executeJSCallback(callback);
     }
 
-    while(true) {
-        task = eventLoop.nextTask();
-        if (task) {
-            task.execute();
+    needsRendering() {
+        return vSyncTime() && (needsDomRerender() || hasEventLoopEventsToDispatch());
+    },
+
+    render() {
+        dispatchPendingUIEvents();
+        resizeSteps();
+        scrollSteps();
+        mediaQuerySteps();
+        cssAnimationSteps();
+        fullscreenRenderingSteps();
+
+        this.executeRequestAnimationFrameCallbacks();
+
+        intersectionObserverSteps();
+
+        while (resizeObserverSteps()) {
+            updateStyle();
+            updateLayout();
         }
-        eventLoop.executeMicrotasks();
-        if (eventLoop.needsRendering())
-            eventLoop.render();
+        paint();
     }
+}
+
+while(true) {
+    task = eventLoop.nextTask();
+    if (task) {
+        task.execute();
+    }
+    eventLoop.executeMicrotasks();
+    if (eventLoop.needsRendering())
+        eventLoop.render();
+}
+```
 
 ## Close reading of the spec
 
